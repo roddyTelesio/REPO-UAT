@@ -3,7 +3,7 @@ name: DeployToSTAGING
 on:
   pull_request:
     types: [closed]
-    branches: UAT
+    branches: main
 jobs:
     deploy-staging:
         runs-on: ubuntu-latest
