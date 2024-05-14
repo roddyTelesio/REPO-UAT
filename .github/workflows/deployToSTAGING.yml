@@ -1,0 +1,54 @@
+name: DeployToSTAGING
+
+on:
+  pull_request:
+    types: [closed]
+    branches: UAT
+jobs:
+    deploy-staging:
+        runs-on: ubuntu-latest
+        steps: 
+        # Checkout the source code
+            - name: 'Checkout source code'
+              uses: actions/checkout@v3
+              with:
+                fetch-depth: 0                           
+          #Install Salesforce CLI
+            - name: 'Install Salesforce CLI'
+              run: |
+                npm install @salesforce/cli --location=global
+                nodeInstallPath=$(npm config get prefix)
+                echo "$nodeInstallPath/bin" >> $GITHUB_PATH
+                sf --version
+           #Install sfdxGit delta
+            - name: Install sfdxGit delta
+              run: |
+                  echo y | sfdx plugins:install sfdx-git-delta
+                  echo x | sfdx sgd:source:delta --to "HEAD" --from "HEAD^" --output changedSources/ --generate-delta
+                  echo "--- package.xml generated with added and modified metadata ---"
+                  cat changedSources/package/package.xml
+                  echo "--- destructiveChanges.xml generated with deleted metadata ---"
+                  cat changedSources/destructiveChanges/destructiveChanges.xml
+            - uses: sfdx-actions/setup-sfdx@v1
+              with:
+                    sfdx-auth-url: ${{ secrets.UAT_SFDX_URL }}                    
+        # Load secret for dev hub
+            - name: "Populate auth file with STAGING_URL secret"
+              shell: bash
+              run: "echo ${{ secrets.STAGING_SFDX_URL}} > ./STAGING_URL_STORE.txt"
+              
+        #Authenticate STAGING
+            - name: 'Authenticate STAGING'
+              run: sf org login sfdx-url -f ./STAGING_URL_STORE.txt -a devhubSTAGING -d
+            
+        # Validate Source DEV to STAGING Org 
+            - name: 'Validate source before deploy STAGING org'
+              #run: sf project deploy start --source-dir changed-sources/ -l 'RunLocalTests' -o roddy.randrianarison@axa-re.com.staging
+              run:  sf project deploy start --verbose -x changedSources/package/package.xml -o roddy.randrianarison@axa-re.com.staging --dry-run
+        
+        # Deploy DEV to STAGING Org 
+            - name: 'Deploy source dev to STAGING org'
+             #run: sf project deploy start --source-dir changed-sources/ -l 'RunLocalTests' -o roddy.randrianarison@axa-re.com.staging
+              run:  sf project deploy start --verbose -x changedSources/package/package.xml -o roddy.randrianarison@axa-re.com.staging
+
+
